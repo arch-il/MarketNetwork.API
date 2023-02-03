@@ -6,6 +6,7 @@
     using MarketNetwork.API.Models;
 
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.AspNetCore.Mvc.Infrastructure;
     using Microsoft.EntityFrameworkCore;
     using System.Runtime.InteropServices;
 
@@ -35,7 +36,7 @@
         [HttpGet("[action]/{id}")]
         public async Task<ActionResult<Client>> GetById(int id)
         {
-            Client? client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
+            var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
             // Check if this item exists in Database
             if (client == null)
@@ -46,7 +47,7 @@
 
         // Add new item to Database
         [HttpPost("[action]")]
-        public async Task<ActionResult<Client>> Create([FromQuery] CreateClientModel createClientModel)
+        public async Task<ActionResult<bool>> Create([FromQuery] CreateClientModel createClientModel)
         {
             // Create Entity using input data
             Client client = new()
@@ -57,6 +58,7 @@
                 Warnings = 0
             };
 
+
             // Check if variables entered are valid
             if (_clientService.GetCheckedClient(client) == null)
                 return this.BadRequest();
@@ -64,7 +66,7 @@
             db.Client.Add(client);
             await this.db.SaveChangesAsync();
 
-            return Ok(client);
+            return Ok();
         }
 
         // Update item in Database
