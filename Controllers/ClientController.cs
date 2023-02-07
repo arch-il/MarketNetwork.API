@@ -27,148 +27,444 @@
 
         // Get all of the items from Database
         [HttpGet("[action]")]
-        public async Task<ActionResult<IEnumerable<Client>>> GetAll()
+        public async Task<CustomResponseModel<IEnumerable<ViewClientModel>>> GetAll()
         {
-            return await this.db.Client.ToListAsync();
+            try
+            {
+                // get list of all blacklists
+                var clients = await this.db.Client.ToListAsync();
+
+                // create empty list of blacklist view models
+                var clientViewModels = new List<ViewClientModel>();
+
+                // fill up blacklist view models with data from database
+                foreach (var client in clients)
+                {
+                    clientViewModels.Add(new()
+                    {
+                        Id = client.Id,
+                        FullName = client.FullName,
+                        Age = client.Age,
+                        MoneyInWallet = client.MoneyInWallet,
+                        Warnings = client.Warnings
+                    });
+                }
+
+                // return response model
+                return new CustomResponseModel<IEnumerable<ViewClientModel>>()
+                {
+                    StatusCode = 200,
+                    Result = clientViewModels
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<IEnumerable<ViewClientModel>>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Get single item from Database using Id
         [HttpGet("[action]/{id}")]
-        public async Task<ActionResult<Client>> GetById(int id)
+        public async Task<CustomResponseModel<ViewClientModel>> GetById(int id)
         {
-            var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
+            try
+            {
+                // find client in Database
+                var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
-            // Check if this item exists in Database
-            if (client == null)
-                return NotFound();
+                // Check if this item exists in Database
+                if (client == null)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database"
+                    };
 
-            return new ObjectResult(client);
+                // map client entity to model
+                var clientViewModel = new ViewClientModel()
+                {
+                    Id = client.Id,
+                    Age = client.Age,
+                    FullName = client.FullName,
+                    MoneyInWallet = client.MoneyInWallet,
+                    Warnings = client.Warnings
+                };
+
+                // return response model
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 200,
+                    Result = clientViewModel
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Add new item to Database
         [HttpPost("[action]")]
-        public async Task<ActionResult<bool>> Create([FromQuery] CreateClientModel createClientModel)
+        public async Task<CustomResponseModel<bool>> Create([FromQuery] CreateClientModel createClientModel)
         {
-            // Create Entity using input data
-            Client client = new()
+            try
             {
-                FullName = createClientModel.FullName,
-                Age = createClientModel.Age,
-                MoneyInWallet = createClientModel.MoneyInWallet,
-                Warnings = 0
-            };
+                // map create model to entity model
+                Client client = new()
+                {
+                    FullName = createClientModel.FullName,
+                    Age = createClientModel.Age,
+                    MoneyInWallet = createClientModel.MoneyInWallet,
+                    Warnings = 0
+                };
+
+                // Check if variables entered are valid
+                if (_clientService.GetCheckedClient(client) == null)
+                    return new CustomResponseModel<bool>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database",
+                        Result = false
+                    };
+
+                // write to database
+                db.Client.Add(client);
+                await this.db.SaveChangesAsync();
 
 
-            // Check if variables entered are valid
-            if (_clientService.GetCheckedClient(client) == null)
-                return this.BadRequest();
+                // return success code
+                return new CustomResponseModel<bool>()
+                {
+                    StatusCode = 200,
+                    Result = true
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
 
-            db.Client.Add(client);
-            await this.db.SaveChangesAsync();
-
-            return Ok();
+                // return status code 500
+                return new CustomResponseModel<bool>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Update item in Database
         [HttpPut("[action]")]
-        public async Task<ActionResult<Client>> Update([FromQuery] Client client)
+        public async Task<CustomResponseModel<ViewClientModel>> Update([FromQuery] UpdateClientModel updateClientModel)
         {
-            // Check if variables entered are valid
-            if (_clientService.GetCheckedClient(client) == null)
-                return this.BadRequest();
+                try
+                {
+                    // get client from database
+                    var client = await db.Client.FirstOrDefaultAsync(x => x.Id == updateClientModel.Id);
 
-            // Check if item exists in Database
-            if (!db.Client.Any(x => x.Id == client.Id))
-                return this.NotFound();
+                    // check if client exists in Database
+                    if (client == null)
+                        return new CustomResponseModel<ViewClientModel>()
+                        {
+                            StatusCode = 400,
+                            ErrorMessage = "Client not found in Database"
+                        };
 
-            db.Client.Update(client);
-            await db.SaveChangesAsync();
+                    // map to entity
+                    client = new Client()
+                    {
+                        Id = updateClientModel.Id,
+                        FullName = updateClientModel.FullName,
+                        Age = updateClientModel.Age,
+                        MoneyInWallet = updateClientModel.MoneyInWallet,
+                        Warnings = updateClientModel.Warnings
+                    };
 
-            return Ok(client);
-        }
+                    // update in database
+                    db.Client.Update(client);
+                    await db.SaveChangesAsync();
+
+                    // map to view model
+                    var viewClientModel = new ViewClientModel()
+                    {
+                        Id = client.Id,
+                        FullName = client.FullName,
+                        Age = client.Age,
+                        MoneyInWallet = client.MoneyInWallet,
+                        Warnings = client.Warnings
+                    };
+
+                    // return success code
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 200,
+                        Result = viewClientModel
+                    };
+                }
+                catch (Exception ex)
+                {
+                    // log problem
+                    _logger.LogCritical(ex.Message);
+
+                    // return status code 500
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 500,
+                        ErrorMessage = "Something went wrong, please contact support"
+                    };
+                }
+            }
 
         // Delete item from Database using Id
         [HttpDelete("[action]/{id}")]
-        public async Task<ActionResult<Client>> Delete(int id)
+        public async Task<CustomResponseModel<ViewClientModel>> Delete(int id)
         {
-            Client? client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
+            try
+            {
+                // get item from database
+                var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
-            // Check if item exists in Database
-            if (id < 0 || client == null)
-                return NotFound();
+                // Check if item exists in Database
+                if (id < 0 || client == null)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database"
+                    };
 
-            db.Client.Remove(client);
-            await db.SaveChangesAsync();
+                // delete from database
+                db.Client.Remove(client);
+                await db.SaveChangesAsync();
 
-            return Ok(client);
+                // map entity to view model
+                var viewClientModel = new ViewClientModel()
+                {
+                    Id = client.Id,
+                    FullName = client.FullName,
+                    Age = client.Age,
+                    MoneyInWallet = client.MoneyInWallet,
+                    Warnings = client.Warnings
+                };
+
+                // return status code 200
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 200,
+                    Result = viewClientModel
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Enter how much money you earned
         [HttpPut("[action]/{amount}")]
-        public async Task<ActionResult<Client>> EarnMoney(int id, int amount)
+        public async Task<CustomResponseModel<ViewClientModel>> EarnMoney(int id, int amount)
         {
-            Client? client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
-            
-            // Check if client exists
-            if (client == null)
-                return this.BadRequest();
+            try
+            {
+                // find client in Database
+                var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
-            client.MoneyInWallet += amount;
+                // Check if client exists
+                if (client == null)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database"
+                    };
 
-            db.Client.Update(client);
-            await db.SaveChangesAsync();
+                // increment by amount
+                client.MoneyInWallet += amount;
 
-            return Ok(client);
+                // update in database
+                db.Client.Update(client);
+                await db.SaveChangesAsync();
+
+                // map base entity to view model
+                var viewClientModel = new ViewClientModel()
+                {
+                    Id = client.Id,
+                    FullName = client.FullName,
+                    Age = client.Age,
+                    MoneyInWallet = client.MoneyInWallet,
+                    Warnings = client.Warnings
+                };
+
+                // return success code
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 200,
+                    Result = viewClientModel
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Enter how much money you lost
         [HttpPut("[action]/{amount}")]
-        public async Task<ActionResult<Client>> LoseMoney(int id, int amount)
+        public async Task<CustomResponseModel<ViewClientModel>> LoseMoney(int id, int amount)
         {
-            Client? client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
-            
-            // Check if client exists
-            if (client == null)
-                return this.BadRequest();
+            try
+            {
+                // find client in Database
+                var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
-            // Check if amount lost is valid
-            if (client.MoneyInWallet - amount < 0)
-                return this.BadRequest();
-            
-            client.MoneyInWallet += amount;
+                // Check if client exists
+                if (client == null)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database"
+                    };
 
-            db.Client.Update(client);
-            await db.SaveChangesAsync();
+                // check if client has enough money
+                if (client.MoneyInWallet - amount < 0)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client does not have enough money"
+                    };
 
-            return Ok(client);
+                // decrement by amount
+                client.MoneyInWallet -= amount;
+
+                // update in database
+                db.Client.Update(client);
+                await db.SaveChangesAsync();
+
+                // map base entity to view model
+                var viewClientModel = new ViewClientModel()
+                {
+                    Id = client.Id,
+                    FullName = client.FullName,
+                    Age = client.Age,
+                    MoneyInWallet = client.MoneyInWallet,
+                    Warnings = client.Warnings
+                };
+
+                // return success code
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 200,
+                    Result = viewClientModel
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
 
         // Try your luck in lottery. 1 in 1,000,000 chance of winning million dollars. price is 25
         [HttpPut("[action]/{id}")]
-        public async Task<ActionResult<Client>> BuyLotteryTicket(int id)
+        public async Task<CustomResponseModel<ViewClientModel>> BuyLotteryTicket(int id)
         {
-            Client? client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
+            try
+            {
+                // find client in database
+                var client = await db.Client.FirstOrDefaultAsync(x => x.Id == id);
 
-            // Check if client exists
-            if (client == null)
-                return this.BadRequest();
+                // Check if client exists
+                if (client == null)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client not found in Database"
+                    };
 
-            // Check if client has enough money for lottery ticket
-            if (client.MoneyInWallet - 25 < 0)
-                return this.BadRequest();
-            
-            // make client pay for lottery ticket
-            client.MoneyInWallet -= 25;
+                // Check if client has enough money for lottery ticket
+                if (client.MoneyInWallet - 25 < 0)
+                    return new CustomResponseModel<ViewClientModel>()
+                    {
+                        StatusCode = 400,
+                        ErrorMessage = "Client does not have enough money"
+                    };
 
-            // roll 1 in 1,000,000 chance of winning million dollars. lucky number is 12345
-            Random rand = new Random();
-            if (rand.Next(0, 100000) == 12345)
-                client.MoneyInWallet += 1000000;
+                // make client pay for lottery ticket
+                client.MoneyInWallet -= 25;
 
-            db.Client.Update(client);
-            await db.SaveChangesAsync();
+                // roll 1 in 1,000,000 chance of winning million dollars. lucky number is 12345
+                Random rand = new Random();
+                if (rand.Next(0, 100000) == 12345)
+                    client.MoneyInWallet += 1000000;
 
-            return Ok(client);
+                db.Client.Update(client);
+                await db.SaveChangesAsync();
+
+                var viewClientModel = new ViewClientModel()
+                {
+                    Id = client.Id,
+                    FullName = client.FullName,
+                    Age = client.Age,
+                    MoneyInWallet = client.MoneyInWallet,
+                    Warnings = client.Warnings
+                };
+
+                // return succcess code
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 200,
+                    Result = viewClientModel
+                };
+            }
+            catch (Exception ex)
+            {
+                // log problem
+                _logger.LogCritical(ex.Message);
+
+                // return status code 500
+                return new CustomResponseModel<ViewClientModel>()
+                {
+                    StatusCode = 500,
+                    ErrorMessage = "Something went wrong, please contact support"
+                };
+            }
         }
     }
 }
